@@ -1,0 +1,108 @@
+---
+import { PRODUCTS } from '../data/products';
+import { TILES, GROUTS } from '../data/colors';
+import { SITE, type Lang } from '../config';
+import { t } from '../i18n';
+interface Props { lang: Lang; product?: string; tile?: string; grout?: string }
+const { lang, product = '', tile = '', grout = '' } = Astro.props;
+const d = t(lang).form;
+const msgs = JSON.stringify({ sending: d.sending, ok: d.ok, err: d.err, mailto: d.mailto, subject: d.subject, send: d.send });
+---
+<form class="form inquiry" data-key={SITE.web3formsKey} data-email={SITE.email} data-msgs={msgs} novalidate>
+  <label>{d.name}<input name="name" required autocomplete="name" /></label>
+  <label>{d.email}<input name="email" type="email" required autocomplete="email" /></label>
+  <label class="full">{d.phone}<input name="phone" type="tel" autocomplete="tel" /></label>
+  <label class="full">{d.product}
+    <select name="product">
+      <option value="">{d.any}</option>
+      {PRODUCTS.map((p) => <option value={p.name[lang]} selected={p.slug === product}>{p.name[lang]}</option>)}
+    </select>
+  </label>
+  <label>{d.tile}
+    <select name="tile">
+      <option value="">{d.any}</option>
+      {TILES.map((x) => <option value={x.id} selected={x.id === tile}>{x.name[lang]}</option>)}
+    </select>
+  </label>
+  <label>{d.grout}
+    <select name="grout">
+      <option value="">{d.any}</option>
+      {GROUTS.map((x) => <option value={x.id} selected={x.id === grout}>{x.name[lang]}</option>)}
+    </select>
+  </label>
+  <label class="full">{d.message}<textarea name="message" rows="4" placeholder={d.messagePh}></textarea></label>
+  <label class="full check"><input type="checkbox" name="consent" required />{d.consent}</label>
+  <!-- ochrana proti spamu -->
+  <input type="checkbox" name="botcheck" hidden tabindex="-1" autocomplete="off" />
+  <div class="full submit">
+    <button class="btn" type="submit">{d.send}</button>
+    <p class="form-status" role="status" aria-live="polite"></p>
+  </div>
+</form>
+
+<script>
+  document.querySelectorAll<HTMLFormElement>('form.inquiry').forEach((form) => {
+    const m = JSON.parse(form.dataset.msgs!);
+    const status = form.querySelector<HTMLElement>('.form-status')!;
+    const btn = form.querySelector<HTMLButtonElement>('button[type=submit]')!;
+
+    // napojenie na konfigurátor na stránke produktu
+    document.addEventListener('config:change', (e) => {
+      const { tile, grout } = (e as CustomEvent).detail;
+      (form.elements.namedItem('tile') as HTMLSelectElement).value = tile;
+      (form.elements.namedItem('grout') as HTMLSelectElement).value = grout;
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!form.reportValidity()) return;
+      const fd = new FormData(form);
+      const sel = (n: string) => {
+        const s = form.elements.namedItem(n) as HTMLSelectElement;
+        return s.selectedOptions[0]?.text ?? '';
+      };
+      const summary = `${sel('product')} | ${sel('tile')} / ${sel('grout')}`;
+      const key = form.dataset.key;
+
+      if (!key) {
+        const body = [
+          `${fd.get('name')} <${fd.get('email')}> ${fd.get('phone') || ''}`,
+          summary,
+          '',
+          String(fd.get('message') || ''),
+        ].join('\n');
+        location.href = `mailto:${form.dataset.email}?subject=${encodeURIComponent(m.subject + ': ' + sel('product'))}&body=${encodeURIComponent(body)}`;
+        status.textContent = m.mailto;
+        return;
+      }
+
+      btn.disabled = true; btn.textContent = m.sending; status.textContent = '';
+      try {
+        const res = await fetch('https://api.web3forms.com/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            access_key: key,
+            subject: `${m.subject}: ${summary}`,
+            from_name: 'Na kocky web',
+            name: fd.get('name'), email: fd.get('email'), phone: fd.get('phone'),
+            product: sel('product'), tile: sel('tile'), grout: sel('grout'),
+            message: fd.get('message'), botcheck: fd.get('botcheck'),
+          }),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message);
+        form.reset();
+        status.textContent = m.ok;
+      } catch {
+        status.textContent = m.err;
+      } finally {
+        btn.disabled = false; btn.textContent = m.send;
+      }
+    });
+  });
+</script>
+
+<style>
+  .submit { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+</style>

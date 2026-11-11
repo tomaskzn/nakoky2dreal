@@ -1,0 +1,238 @@
+---
+import { photoUrl, type Product } from '../data/products';
+import { TILES, GROUTS, tileById, groutById } from '../data/colors';
+import { renderProduct } from '../lib/render';
+import fs from 'node:fs';
+import path from 'node:path';
+import type { Lang } from '../config';
+import { t } from '../i18n';
+interface Props { p: Product; lang: Lang }
+const { p, lang } = Astro.props;
+const d = t(lang);
+const tile = tileById(p.tile);
+const grout = groutById(p.grout);
+// skutočné fotky kombinácií, ktoré existujú: public/photos/{slug}/{kachlicka}-{skara}.jpg
+const dir = path.join(process.cwd(), 'public', 'photos', p.slug);
+const variantFiles = fs.existsSync(dir)
+  ? fs.readdirSync(dir).filter((f) => /^[a-z]+-[a-z]+\.jpg$/.test(f))
+  : [];
+const variants = JSON.stringify(variantFiles);
+const msg = JSON.stringify({ drawing: d.config.drawing, recolored: d.config.recolored });
+const names = JSON.stringify({
+  tiles: Object.fromEntries(TILES.map((x) => [x.id, x.name[lang]])),
+  grouts: Object.fromEntries(GROUTS.map((x) => [x.id, x.name[lang]])),
+});
+---
+<div class="config" data-slug={p.slug} data-names={names} data-msg={msg} data-variants={variants} style={`--tile:${tile.hex};--grout:${grout.hex}`}>
+  <div class="preview">
+    <div class="stage" data-stage>
+      <Fragment set:html={renderProduct(p, 'big')} />
+      <img data-photo alt="" hidden />
+      <canvas data-canvas hidden></canvas>
+      <p class="badge" data-badge></p>
+    </div>
+    <div class="thumbs">
+      {p.photos.map((ph, i) => (
+        <button type="button" class:list={['thumb', { on: i === 0 }]} data-thumb={photoUrl(p, ph.file)} data-recolor={ph.recolor ? '1' : ''}
+          data-alt={ph.alt[lang]} aria-label={ph.alt[lang]}>
+          <img src={photoUrl(p, ph.file)} alt="" loading="lazy" />
+          {ph.recolor && <span class="dot" aria-hidden="true"></span>}
+        </button>
+      ))}
+      <button type="button" class:list={['thumb', { on: p.photos.length === 0 }]} data-thumb="render" aria-label={d.config.drawing}>
+        <Fragment set:html={renderProduct(p, 'mini')} />
+      </button>
+    </div>
+    <p class="hint">{d.config.hint}</p>
+  </div>
+
+  <div class="panel">
+    <h1>{p.name[lang]}</h1>
+    <p class="lead">{p.desc[lang]}</p>
+    <p class="dims">{d.products.dims}: <strong>{p.dims.w} × {p.dims.d} × {p.dims.h} cm</strong></p>
+
+    <fieldset>
+      <legend>{d.config.tiles}: <strong data-tile-name>{tile.name[lang]}</strong></legend>
+      <div class="swatches" role="radiogroup">
+        {TILES.map((x) => (
+          <button type="button" class="swatch" role="radio" aria-checked={x.id === tile.id ? 'true' : 'false'}
+            aria-label={x.name[lang]} data-kind="tile" data-id={x.id} data-hex={x.hex} style={`--c:${x.hex}`}>
+            <span class="tip">{x.name[lang]}</span>
+          </button>
+        ))}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>{d.config.grout}: <strong data-grout-name>{grout.name[lang]}</strong></legend>
+      <div class="swatches" role="radiogroup">
+        {GROUTS.map((x) => (
+          <button type="button" class="swatch grout" role="radio" aria-checked={x.id === grout.id ? 'true' : 'false'}
+            aria-label={x.name[lang]} data-kind="grout" data-id={x.id} data-hex={x.hex} style={`--c:${x.hex}`}>
+            <span class="tip">{x.name[lang]}</span>
+          </button>
+        ))}
+      </div>
+    </fieldset>
+
+    <button type="button" class="btn ghost dice" data-random>🎲 {d.config.random}</button>
+
+    <div class="buy">
+      <div>
+        <p class="muted">{d.config.price}</p>
+        <p class="price">{d.products.from} {p.price} €</p>
+      </div>
+      <a class="btn" href="#dopyt">{d.config.cta} →</a>
+    </div>
+    <p class="note">{d.config.priceNote}</p>
+  </div>
+</div>
+
+<script>
+  import { recolorer, type Recolorer } from '../lib/recolor';
+
+  document.querySelectorAll<HTMLElement>('.config').forEach((root) => {
+    const names = JSON.parse(root.dataset.names!);
+    const msg = JSON.parse(root.dataset.msg!);
+    const slug = root.dataset.slug!;
+    const stage = root.querySelector<HTMLElement>('[data-stage]')!;
+    const img = root.querySelector<HTMLImageElement>('[data-photo]')!;
+    const canvas = root.querySelector<HTMLCanvasElement>('[data-canvas]')!;
+    const svg = stage.querySelector('svg')!;
+    const badge = root.querySelector<HTMLElement>('[data-badge]')!;
+    const thumbs = [...root.querySelectorAll<HTMLElement>('[data-thumb]')];
+    const hexOf = (kind: string, id: string) =>
+      root.querySelector<HTMLElement>(`[data-kind=${kind}][data-id=${id}]`)!.dataset.hex!;
+    const state: Record<string, string> = {
+      tile: root.querySelector<HTMLElement>('[data-kind=tile][aria-checked=true]')!.dataset.id!,
+      grout: root.querySelector<HTMLElement>('[data-kind=grout][aria-checked=true]')!.dataset.id!,
+    };
+    let view = thumbs.find((b) => b.classList.contains('on'))!;
+
+    const show = (what: 'svg' | 'img' | 'canvas', text = '') => {
+      svg.style.display = what === 'svg' ? '' : 'none';
+      img.hidden = what !== 'img';
+      canvas.hidden = what !== 'canvas';
+      badge.textContent = text;
+      badge.hidden = !text;
+    };
+
+    // skutočné fotky kombinácií zistené pri zostavení webu
+    const variants: string[] = JSON.parse(root.dataset.variants!);
+    const hasVariant = (file: string) => variants.includes(file);
+    const painters = new Map<string, Promise<Recolorer>>();
+
+    let token = 0;
+    const update = async () => {
+      const my = ++token;
+      const key = view.dataset.thumb!;
+      const combo = `${names.tiles[state.tile]} / ${names.grouts[state.grout]}`;
+      if (key === 'render') return show('svg', msg.drawing);
+      if (!view.dataset.recolor) {
+        img.src = key; img.alt = view.dataset.alt!;
+        return show('img');
+      }
+      const file = `${state.tile}-${state.grout}.jpg`;
+      if (key.endsWith(`/${file}`) || (key === thumbs[0].dataset.thumb && hasVariant(file))) {
+        img.src = key.endsWith(`/${file}`) ? key : `${import.meta.env.BASE_URL.replace(/\/$/, '')}/photos/${slug}/${file}`;
+        img.alt = combo;
+        return show('img', combo);
+      }
+      if (!painters.has(key)) painters.set(key, recolorer(key, canvas));
+      try {
+        const r = await painters.get(key)!;
+        if (my !== token) return;
+        requestAnimationFrame(() => {
+          if (my !== token) return;
+          r.paint(hexOf('tile', state.tile), hexOf('grout', state.grout));
+          canvas.setAttribute('aria-label', `${view.dataset.alt} – ${combo}`);
+          show('canvas', `${combo} · ${msg.recolored}`);
+        });
+      } catch {
+        if (my === token) show('svg', msg.drawing);
+      }
+    };
+
+    thumbs.forEach((b) => b.addEventListener('click', () => {
+      view = b;
+      thumbs.forEach((x) => x.classList.toggle('on', x === b));
+      update();
+    }));
+
+    const select = (kind: string, id: string) => {
+      const btn = root.querySelector<HTMLElement>(`[data-kind=${kind}][data-id=${id}]`)!;
+      root.querySelectorAll(`[data-kind=${kind}]`).forEach((b) => b.setAttribute('aria-checked', String(b === btn)));
+      root.style.setProperty(kind === 'tile' ? '--tile' : '--grout', btn.dataset.hex!);
+      root.querySelector(kind === 'tile' ? '[data-tile-name]' : '[data-grout-name]')!.textContent =
+        names[kind === 'tile' ? 'tiles' : 'grouts'][id];
+      state[kind] = id;
+      update();
+      document.dispatchEvent(new CustomEvent('config:change', { detail: { ...state } }));
+    };
+
+    root.addEventListener('click', (e) => {
+      const b = (e.target as Element).closest<HTMLElement>('[data-kind]');
+      if (b) select(b.dataset.kind!, b.dataset.id!);
+    });
+
+    root.querySelector('[data-random]')!.addEventListener('click', () => {
+      const pick = (kind: string) => {
+        const opts = [...root.querySelectorAll<HTMLElement>(`[data-kind=${kind}]`)].filter((b) => b.dataset.id !== state[kind]);
+        return opts[Math.floor(Math.random() * opts.length)].dataset.id!;
+      };
+      stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake');
+      select('tile', pick('tile'));
+      select('grout', pick('grout'));
+    });
+
+    update();
+  });
+</script>
+
+<style>
+  .config { display: grid; grid-template-columns: 1.15fr 1fr; gap: clamp(28px, 5vw, 64px); align-items: start; }
+  .preview { position: sticky; top: 92px; }
+  .stage {
+    position: relative; overflow: hidden;
+    display: block; aspect-ratio: 4 / 3; padding: 7% 12%;
+    background:
+      linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 32px 32px,
+      linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 32px 32px, #fbf8f1;
+    border: 2px solid var(--ink); border-radius: var(--radius);
+  }
+  .stage :global(.render) { width: 100%; height: 100%; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .thumbs { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .thumb { width: 84px; aspect-ratio: 4 / 3; padding: 0; border: 2px solid var(--line); border-radius: 10px; overflow: hidden; background: #fbf8f1; cursor: pointer; display: grid; place-items: center; transition: transform .15s; }
+  .thumb:hover { transform: translateY(-2px); }
+  .thumb.on { border-color: var(--ink); }
+  .thumb { position: relative; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .thumb .dot { position: absolute; right: 5px; bottom: 5px; width: 14px; height: 14px; border-radius: 4px; background: var(--tile); border: 2px solid var(--grout); box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .hint { margin-top: 8px; font-size: .82rem; color: var(--muted); }
+  .thumb :global(.render) { width: 80%; height: 80%; }
+  .stage.shake { animation: shake .5s ease; }
+  @keyframes shake {
+    20% { transform: rotate(-3deg) scale(.97); } 40% { transform: rotate(3deg); }
+    60% { transform: rotate(-2deg); } 80% { transform: rotate(1deg) scale(1.01); }
+  }
+  .badge { position: absolute; left: 12px; bottom: 12px; margin: 0; font-size: .8rem; font-weight: 600; background: rgba(255,255,255,.9); padding: 4px 10px; border-radius: 999px; }
+  .panel { display: grid; gap: 22px; }
+  h1 { font-size: clamp(2.4rem, 5vw, 4rem); }
+  .lead { font-size: 1.1rem; color: var(--muted); }
+  fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; }
+  legend { padding: 0; margin-bottom: 12px; font-weight: 600; }
+  .swatch.grout { border-radius: 50%; }
+  .dice { justify-self: start; }
+  .dice:hover { transform: rotate(-2deg); }
+  .buy { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 20px; background: var(--card); border: 2px solid var(--ink); border-radius: var(--radius); }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .price { font: 800 2rem var(--font-head); }
+  .note { font-size: .88rem; color: var(--muted); }
+  @media (max-width: 860px) {
+    .config { grid-template-columns: 1fr; }
+    .preview { position: static; }
+  }
+</style>

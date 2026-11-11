@@ -1,0 +1,15 @@
+---
+// Koreň webu presmeruje na slovenskú verziu.
+import { withBase } from '../config';
+const sk = withBase('/sk/');
+---
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="refresh" content={`0; url=${sk}`} />
+    <link rel="canonical" href={sk} />
+    <title>Na kocky</title>
+  </head>
+  <body><a href={sk}>Na kocky</a></body>
+</html>

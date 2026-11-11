@@ -1,0 +1,57 @@
+---
+import { photoUrl, type Product } from '../data/products';
+import { tileById, groutById } from '../data/colors';
+import { renderProduct } from '../lib/render';
+import { productUrl, type Lang } from '../config';
+import { t } from '../i18n';
+interface Props { p: Product; lang: Lang }
+const { p, lang } = Astro.props;
+const d = t(lang);
+const style = `--tile:${tileById(p.tile).hex};--grout:${groutById(p.grout).hex}`;
+const photo = p.photos[0];
+---
+<a class="card reveal" href={productUrl(lang, p.slug)} style={style}>
+  <div class="stage">
+    {photo
+      ? <img src={photoUrl(p, photo.file)} alt={photo.alt[lang]} loading="lazy" width="1200" height="896" />
+      : <div class="art"><Fragment set:html={renderProduct(p)} /></div>}
+    <span class="mini" aria-hidden="true"><Fragment set:html={renderProduct(p)} /></span>
+  </div>
+  <div class="info">
+    <h3>{p.name[lang]}</h3>
+    <p class="tag">{p.tagline[lang]}</p>
+    <p class="meta">{d.products.dims}: {p.dims.w} × {p.dims.d} × {p.dims.h} cm</p>
+    <div class="row">
+      <span class="price">{d.products.from} {p.price} €</span>
+      <span class="go">{d.products.configure} →</span>
+    </div>
+  </div>
+</a>
+
+<style>
+  .card {
+    display: grid; grid-template-rows: auto 1fr; text-decoration: none; background: var(--card); border: 2px solid var(--ink);
+    border-radius: var(--radius); overflow: hidden; transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .card:hover { transform: translate(-3px, -3px); box-shadow: 8px 8px 0 var(--accent); }
+  .stage { position: relative; aspect-ratio: 4 / 3; overflow: hidden; border-bottom: 2px solid var(--ink); background: #fbf8f1; }
+  .stage img { width: 100%; height: 100%; object-fit: cover; transition: transform .6s ease; }
+  .card:hover .stage img { transform: scale(1.05); }
+  .art { padding: 28px; height: 100%; }
+  .art :global(.render) { width: 100%; height: 100%; }
+  .mini {
+    position: absolute; right: 12px; bottom: 12px; width: 76px; height: 76px; padding: 8px;
+    background: rgba(255,255,255,.92); border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12);
+    transform: translateY(8px) rotate(4deg); opacity: 0; transition: transform .3s ease, opacity .3s ease;
+  }
+  .mini :global(.render) { width: 100%; height: 100%; }
+  .card:hover .mini { opacity: 1; transform: none; }
+  .info { display: grid; gap: 6px; padding: 20px 22px 22px; align-content: start; }
+  h3 { font-size: 1.6rem; }
+  .tag { color: var(--muted); }
+  .meta { font-size: .88rem; color: var(--muted); }
+  .row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 10px; flex-wrap: wrap; }
+  .price { font-weight: 700; font-size: 1.15rem; }
+  .go { font-weight: 600; }
+  .card:hover .go { text-decoration: underline; text-underline-offset: 4px; }
+</style>

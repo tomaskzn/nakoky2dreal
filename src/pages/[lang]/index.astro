@@ -1,0 +1,236 @@
+---
+import Base from '../../layouts/Base.astro';
+import ProductCard from '../../components/ProductCard.astro';
+import Mosaic from '../../components/Mosaic.astro';
+import InquiryForm from '../../components/InquiryForm.astro';
+import { PRODUCTS, productBySlug, photoUrl } from '../../data/products';
+import { productUrl, withBase } from '../../config';
+import { TILES, GROUTS } from '../../data/colors';
+import { renderProduct } from '../../lib/render';
+import { LANGS, type Lang } from '../../config';
+import { t } from '../../i18n';
+
+export function getStaticPaths() {
+  return LANGS.map((lang) => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Lang;
+const d = t(lang);
+const alt = withBase(`/${lang === 'sk' ? 'en' : 'sk'}/`);
+const letters = 'NA KOCKY'.split('');
+const words = [letters.slice(0, 2), letters.slice(3)].map((w, k) => w.map((ch, j) => ({ ch, i: k === 0 ? j : j + 3 })));
+const letterColors = ['#1f2b72', '#c27150', '', '#93b08f', '#e3a52b', '#1f2b72', '#c27150', '#93b08f'];
+const palette = JSON.stringify(TILES.map((x) => x.hex));
+const hero = productBySlug('stolik-na-gramofon')!;
+const cube = productBySlug('kocka')!;
+const combos = TILES.length * GROUTS.length;
+// kombinácie, ktorými sa prefarbuje úvodná fotka (prvá = originál)
+const heroCombos = JSON.stringify(
+  [['slonovina', 'terakota'], ['salvia', 'biela'], ['namornicka', 'ruzova'], ['horcica', 'biela'], ['ruzova', 'terakota'], ['smaragd', 'biela'], ['kobalt', 'zlta']]
+    .map(([t, g]) => [TILES.find((x) => x.id === t)!.hex, GROUTS.find((x) => x.id === g)!.hex]),
+);
+---
+<Base lang={lang} alt={alt}>
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div class="hero-copy">
+        <p class="kicker">{d.hero.kicker}</p>
+        <h1 class="tile-title" aria-label="Na kocky" data-palette={palette}>
+          {words.map((w) => (
+            <span class="word">
+              {w.map(({ ch, i }) => (
+                <button type="button" class="lt" style={`--c:${letterColors[i]};--i:${i}`} aria-hidden="true" tabindex="-1">{ch}</button>
+              ))}
+            </span>
+          ))}
+        </h1>
+        <p class="hint">↑ {d.hero.tap}</p>
+        <p class="lead">{d.hero.lead}</p>
+        <div class="ctas">
+          <a class="btn" href="#kusky">{d.hero.cta} →</a>
+          <a class="btn ghost" href="#kontakt">{d.hero.cta2}</a>
+        </div>
+      </div>
+      <div class="hero-art">
+        <a class="hero-photo" href={productUrl(lang, hero.slug)}>
+          <img src={photoUrl(hero, hero.photos[0].file)} alt={hero.photos[0].alt[lang]} width="1200" height="896" fetchpriority="high" />
+          <canvas data-hero-canvas aria-hidden="true"></canvas>
+        </a>
+        <div class="hero-cube" data-src={photoUrl(hero, hero.photos[0].file)} data-combos={heroCombos} style="--tile:#efdfc5;--grout:#c27150">
+          <Fragment set:html={renderProduct(cube)} />
+          <p><strong>{combos}</strong> {d.hero.badge}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="kusky">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2>{d.products.title}</h2>
+        <p>{d.products.lead}</p>
+      </div>
+      <div class="grid">
+        {PRODUCTS.map((p) => <ProductCard p={p} lang={lang} />)}
+      </div>
+    </div>
+  </section>
+
+  <Mosaic lang={lang} />
+
+  <section class="section" id="farby">
+    <div class="wrap colors">
+      <div class="section-head reveal">
+        <h2>{d.colors.title}</h2>
+        <p>{d.colors.lead}</p>
+        <p class="combos"><strong>{TILES.length} × {GROUTS.length} = {TILES.length * GROUTS.length}</strong> {d.colors.combos}</p>
+      </div>
+      <div class="palettes reveal">
+        <h3>{d.colors.tiles}</h3>
+        <ul class="chips">
+          {TILES.map((x) => <li><i style={`background:${x.hex}`}></i>{x.name[lang]}</li>)}
+        </ul>
+        <h3>{d.colors.grout}</h3>
+        <ul class="chips round">
+          {GROUTS.map((x) => <li><i style={`background:${x.hex}`}></i>{x.name[lang]}</li>)}
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section process" id="vyroba">
+    <div class="wrap">
+      <div class="section-head reveal"><h2>{d.process.title}</h2></div>
+      <ol class="steps">
+        {d.process.steps.map((s, i) => (
+          <li class="reveal" style={`--c:${['#1f2b72', '#c27150', '#93b08f', '#e3a52b'][i]}`}>
+            <span class="num">{i + 1}</span>
+            <h3>{s.t}</h3>
+            <p>{s.d}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="kontakt">
+    <div class="wrap contact">
+      <div class="section-head reveal">
+        <h2>{d.contact.title}</h2>
+        <p>{d.contact.lead}</p>
+      </div>
+      <div class="form-card reveal"><InquiryForm lang={lang} /></div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { recolorer } from '../../lib/recolor';
+  const title = document.querySelector<HTMLElement>('.tile-title');
+  if (title) {
+    const pal: string[] = JSON.parse(title.dataset.palette!);
+    title.addEventListener('click', (e) => {
+      const b = (e.target as Element).closest<HTMLElement>('.lt');
+      if (!b) return;
+      const cur = b.style.getPropertyValue('--c');
+      const next = pal[(pal.indexOf(cur) + 1 + Math.floor(Math.random() * 3)) % pal.length];
+      b.style.setProperty('--c', next);
+      b.classList.remove('flip'); void b.offsetWidth; b.classList.add('flip');
+    });
+  }
+
+  const cube = document.querySelector<HTMLElement>('.hero-cube');
+  const heroCanvas = document.querySelector<HTMLCanvasElement>('[data-hero-canvas]');
+  if (cube && heroCanvas && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const combos: [string, string][] = JSON.parse(cube.dataset.combos!);
+    let i = 0;
+    recolorer(cube.dataset.src!, heroCanvas).then((r) => {
+      setInterval(() => {
+        i = (i + 1) % combos.length;
+        const [t, g] = combos[i];
+        cube.style.setProperty('--tile', t);
+        cube.style.setProperty('--grout', g);
+        heroCanvas.classList.remove('in');
+        setTimeout(() => {
+          if (i === 0) return; // originál – canvas ostane skrytý
+          r.paint(t, g);
+          heroCanvas.classList.add('in');
+        }, 350);
+      }, 2600);
+    }).catch(() => {});
+  }
+</script>
+
+<style>
+  .hero { padding: clamp(40px, 7vw, 96px) 0 clamp(56px, 8vw, 110px); overflow: hidden; }
+  .hero-in { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center; }
+  .kicker { font-weight: 700; text-transform: uppercase; letter-spacing: .08em; font-size: .82rem; color: var(--muted); margin-bottom: 18px; }
+  .tile-title { display: flex; flex-wrap: wrap; gap: 6px .32em; font-size: clamp(2.4rem, 6vw, 5.2rem); }
+  .word { display: inline-flex; gap: 6px; white-space: nowrap; }
+  .lt {
+    width: 1.05em; height: 1.05em; display: grid; place-items: center; border: 0; padding: 0; cursor: pointer;
+    font: 800 .78em var(--font-head); color: #fff; background: var(--c); border-radius: .12em;
+    box-shadow: inset 0 0 0 .05em rgba(255,255,255,.25), 0 .06em 0 rgba(0,0,0,.18);
+    text-shadow: 0 .03em 0 rgba(0,0,0,.2);
+    animation: drop .7s cubic-bezier(.3, 1.5, .5, 1) backwards; animation-delay: calc(var(--i) * 70ms);
+    transition: background .3s, transform .2s;
+  }
+  .lt:hover { transform: translateY(-.08em) rotate(-4deg); }
+  .lt.flip { animation: flip .45s ease; }
+  @keyframes drop { from { transform: translateY(-120%) rotate(-25deg); opacity: 0; } }
+  @keyframes flip { 50% { transform: rotateY(90deg) scale(.9); } }
+  .hint { font-size: .85rem; color: var(--muted); margin: 10px 0 22px; }
+  .lead { font-size: clamp(1.1rem, 2vw, 1.35rem); max-width: 34ch; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 30px; }
+  .hero-art { position: relative; }
+  .hero-photo { display: block; border: 2px solid var(--ink); border-radius: 22px; overflow: hidden; box-shadow: 10px 10px 0 var(--accent); transform: rotate(1.2deg); transition: transform .3s ease; }
+  .hero-photo:hover { transform: rotate(0deg) scale(1.01); }
+  .hero-photo { position: relative; }
+  .hero-photo img { width: 100%; height: auto; }
+  .hero-photo canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity .35s ease; }
+  .hero-photo canvas.in { opacity: 1; }
+  .hero-cube {
+    position: absolute; left: -28px; bottom: -36px; width: 150px; padding: 14px 14px 12px;
+    background: var(--card); border: 2px solid var(--ink); border-radius: 18px; text-align: center;
+    animation: float 6s ease-in-out infinite;
+  }
+  .hero-cube :global(.render) { width: 100%; height: auto; }
+  .hero-cube p { font-size: .78rem; line-height: 1.2; margin-top: 4px; color: var(--muted); }
+  .hero-cube strong { display: block; font: 800 1.5rem var(--font-head); color: var(--ink); }
+  @keyframes float { 50% { transform: translateY(-12px); } }
+
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px; }
+
+  .colors { display: grid; grid-template-columns: 1fr 1.2fr; gap: 40px; align-items: start; }
+  .combos { font-size: 1.2rem; color: var(--ink) !important; }
+  .combos strong { font: 800 2.2rem var(--font-head); display: block; }
+  .palettes { display: grid; gap: 16px; background: var(--card); border: 2px solid var(--ink); border-radius: var(--radius); padding: 28px; }
+  .palettes h3 { font-size: 1.3rem; }
+  .chips { list-style: none; padding: 0; margin: 0 0 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .chips li { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: .92rem; }
+  .chips i { width: 34px; height: 34px; border-radius: 7px; border: 2px solid rgba(0,0,0,.12); flex: none; }
+  .chips.round i { border-radius: 50%; }
+
+  .process { background: #efe8da; }
+  .steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  .steps li { background: var(--card); border: 2px solid var(--ink); border-radius: var(--radius); padding: 24px; display: grid; gap: 10px; align-content: start; }
+  .steps li:nth-child(2) { transition-delay: .08s; } .steps li:nth-child(3) { transition-delay: .16s; } .steps li:nth-child(4) { transition-delay: .24s; }
+  .num { width: 48px; height: 48px; display: grid; place-items: center; background: var(--c); color: #fff; border-radius: 9px; font: 800 1.5rem var(--font-head); }
+  .steps h3 { font-size: 1.35rem; }
+  .steps p { color: var(--muted); }
+
+  .contact { display: grid; grid-template-columns: 1fr 1.3fr; gap: 40px; align-items: start; }
+  .form-card { background: var(--card); border: 2px solid var(--ink); border-radius: var(--radius); padding: clamp(20px, 4vw, 36px); }
+
+  @media (max-width: 900px) {
+    .hero-in, .colors, .contact { grid-template-columns: 1fr; }
+    .hero-art { max-width: 620px; margin: 10px auto 30px; width: 100%; }
+    .hero-cube { left: -6px; bottom: -28px; width: 96px; padding: 8px; }
+    .hero-cube strong { font-size: 1.15rem; }
+    .hero-cube p { font-size: .68rem; }
+    .steps { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 640px) {
+    .grid, .steps { grid-template-columns: 1fr; }
+  }
+</style>

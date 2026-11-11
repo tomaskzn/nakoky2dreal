@@ -1,0 +1,58 @@
+---
+import Base from '../../../layouts/Base.astro';
+import Configurator from '../../../components/Configurator.astro';
+import ProductCard from '../../../components/ProductCard.astro';
+import InquiryForm from '../../../components/InquiryForm.astro';
+import { PRODUCTS, type Product } from '../../../data/products';
+import { LANGS, SECTION, productUrl, withBase, type Lang } from '../../../config';
+import { t } from '../../../i18n';
+
+export function getStaticPaths() {
+  return LANGS.flatMap((lang) =>
+    PRODUCTS.map((p) => ({ params: { lang, section: SECTION[lang], slug: p.slug }, props: { p } })),
+  );
+}
+
+const { p } = Astro.props as { p: Product };
+const lang = Astro.params.lang as Lang;
+const d = t(lang);
+const alt = productUrl(lang === 'sk' ? 'en' : 'sk', p.slug);
+const others = PRODUCTS.filter((x) => x.slug !== p.slug);
+---
+<Base lang={lang} alt={alt} title={p.name[lang]} description={p.desc[lang]}>
+  <section class="section first">
+    <div class="wrap">
+      <a class="back" href={withBase(`/${lang}/#kusky`)}>← {d.config.back}</a>
+      <Configurator p={p} lang={lang} />
+    </div>
+  </section>
+
+  <section class="section inquiry-sec" id="dopyt">
+    <div class="wrap contact">
+      <div class="section-head">
+        <h2>{d.contact.title}</h2>
+        <p>{d.contact.lead}</p>
+      </div>
+      <div class="form-card"><InquiryForm lang={lang} product={p.slug} tile={p.tile} grout={p.grout} /></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head"><h2>{d.config.others}</h2></div>
+      <div class="grid">{others.map((x) => <ProductCard p={x} lang={lang} />)}</div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .first { padding-top: 32px; }
+  .back { display: inline-block; margin-bottom: 24px; font-weight: 600; text-decoration: none; }
+  .back:hover { text-decoration: underline; text-underline-offset: 4px; }
+  .inquiry-sec { background: #efe8da; scroll-margin-top: 68px; }
+  .contact { display: grid; grid-template-columns: 1fr 1.3fr; gap: 40px; align-items: start; }
+  .form-card { background: var(--card); border: 2px solid var(--ink); border-radius: var(--radius); padding: clamp(20px, 4vw, 36px); }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  @media (max-width: 900px) { .contact { grid-template-columns: 1fr; } .grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+</style>
